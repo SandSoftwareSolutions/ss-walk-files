@@ -1,0 +1,43 @@
+{
+  "name": "@sandsoftwaresolutions/walk-files",
+  "version": "0.1.0",
+  "description": "Walk a folder in a stable order with .gitignore-style rules, never following symlinks.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": [
+    "walk",
+    "glob",
+    "gitignore",
+    "filesystem"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SandSoftwareSolutions/ss-walk-files.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SandSoftwareSolutions/ss-walk-files/issues"
+  },
+  "homepage": "https://github.com/SandSoftwareSolutions/ss-walk-files#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
