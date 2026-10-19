@@ -93,3 +93,54 @@ test("the matcher on its own", () => {
   assert.equal(m("cache", false), false); // "cache/" is for folders only
   assert.equal(createMatcher()("anything"), false);
 });
+
+test("a hostile pattern in a .gitignore cannot make matching slow", () => {
+  const slow = ["*a*a*a*a*a*a*a*a*a*a*b", "**/**/**/**/**/**/**/**/zzz", "a*a*a*a*a*a*a*a*a*a*a*a*b/**/**/x"];
+  const deep = `${Array.from({ length: 60 }, () => "a").join("/")}/${"a".repeat(400)}`;
+  const started = Date.now();
+  for (const pattern of slow) assert.equal(createMatcher([pattern])(deep), false);
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+});
+
+test("matching agrees with git on a few awkward cases", () => {
+  const m = (patterns, path, isDir = false) => createMatcher(patterns)(path, isDir);
+  assert.equal(m(["a[!x]b"], "a/b"), false, "a negated class never matches a slash");
+  assert.equal(m(["a[!x]b"], "ayb"), true);
+  assert.equal(m(["a?b"], "a/b"), false);
+  assert.equal(m(["a/**/b"], "a/b"), true);
+  assert.equal(m(["a/**/b"], "a/x/y/b"), true);
+  assert.equal(m(["a/**"], "a"), false);
+  assert.equal(m(["a/**"], "a/x"), true);
+  assert.equal(m(["**/c"], "a/b/c"), true);
+  assert.equal(m(["*.log\r", "!keep.log\r"], "keep.log"), false, "a CRLF .gitignore works");
+  assert.equal(m(["a\\ "], "a "), true, "an escaped trailing space is kept");
+  assert.equal(m(["a "], "a"), true, "an unescaped trailing space is cut");
+  assert.equal(m([`${" ".repeat(50_000)}x`], "x"), false);
+});
+
+test("the root can be a link to a folder; links below it are still not followed", { skip: process.platform === "win32" }, async () => {
+  const link = join(root, "..", `${root.split(/[\\/]/).pop()}-link`);
+  symlinkSync(root, link, "dir");
+  try {
+    const viaLink = await listFiles(link, { maxDepth: 1 });
+    assert.ok(viaLink.includes("a.txt"));
+    assert.deepEqual(viaLink, await listFiles(root, { maxDepth: 1 }));
+  } finally {
+    unlinkSync(link);
+  }
+  await assert.rejects(listFiles(join(root, "a.txt")), TypeError);
+});
+
+test("a file that disappears during the walk is skipped", async () => {
+  const gone = join(root, "vanish");
+  mkdirSync(gone, { recursive: true });
+  for (let i = 0; i < 50; i++) writeFileSync(join(gone, `f${i}.txt`), "x");
+  let seen = 0;
+  for await (const entry of walk(gone, {
+    filter: () => {
+      if (seen++ === 0) rmSync(join(gone, "f40.txt"));
+      return true;
+    }
+  })) void entry;
+  assert.ok(seen >= 49);
+});

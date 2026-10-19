@@ -1,4 +1,4 @@
-import { readdir, readFile, lstat } from "node:fs/promises";
+import { readdir, readFile, lstat, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { createMatcher } from "./ignore.js";
@@ -17,7 +17,7 @@ const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
  */
 export async function* walk(root, { ignore = [], ignoreFiles = [], dirs = false, symlinks = "skip", maxDepth = Infinity, filter, signal } = {}) {
   const base = resolve(root);
-  const top = await lstat(base);
+  const top = await stat(base); // the root itself may be a link to a folder (as /tmp is on macOS); links below it are never followed
   if (!top.isDirectory()) throw new TypeError(`walk-files: ${root} is not a folder`);
   if (!["skip", "include"].includes(symlinks)) throw new RangeError('walk-files: symlinks must be "skip" or "include"');
   const patterns = typeof ignore === "string" ? ignore.split("\n") : [...ignore];
@@ -32,7 +32,13 @@ export async function* walk(root, { ignore = [], ignoreFiles = [], dirs = false,
 
   async function* visit(dir, rel, depth) {
     signal?.throwIfAborted();
-    const names = (await readdir(dir, { withFileTypes: true })).sort(byName);
+    let names;
+    try {
+      names = (await readdir(dir, { withFileTypes: true })).sort(byName);
+    } catch (error) {
+      if (error.code === "ENOENT" && dir !== base) return; // removed while we were walking
+      throw error;
+    }
     for (const dirent of names) {
       const childRel = rel ? `${rel}/${dirent.name}` : dirent.name;
       const path = join(dir, dirent.name);
@@ -52,7 +58,13 @@ export async function* walk(root, { ignore = [], ignoreFiles = [], dirs = false,
         }
         if (depth < maxDepth) yield* visit(path, childRel, depth + 1);
       } else if (dirent.isFile()) {
-        const info = await lstat(path);
+        let info;
+        try {
+          info = await lstat(path);
+        } catch (error) {
+          if (error.code === "ENOENT") continue; // removed while we were walking
+          throw error;
+        }
         const entry = { path, rel: childRel, name: dirent.name, type: "file", size: info.size, mtimeMs: info.mtimeMs };
         if (!filter || (await filter(entry))) yield entry;
       }
