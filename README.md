@@ -10,6 +10,8 @@ Walk a folder in the same order on every machine, with `.gitignore`-style ignore
 npm install @sandsoftwaresolutions/walk-files
 ```
 
+Works with `import` and `require()`, and ships TypeScript types for both.
+
 ## Usage
 
 ```js
